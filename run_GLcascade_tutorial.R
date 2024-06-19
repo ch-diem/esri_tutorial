@@ -33,21 +33,25 @@ os_type <- c("win", "unix")[2]
 
 # install packages from source
 if(os_type == "win"){
+  install.packages(paste0(path, "/fastcascade_0.9.3.1.zip"), 
+                   repos = NULL, type = "win.binary")
+  
   install.packages(paste0(path, "/GLcascade_0.9.3.1.zip"), 
                    repos = NULL, type = "win.binary")
   
-  install.packages(paste0(path, "/fastcascade_0.9.3.1.zip"), 
-                   repos = NULL, type = "win.binary")
+  
 }
 
 if(os_type == "unix"){
-  install.packages(paste0(path, "/GLcascade_0.9.3.1.tar.gz"), 
-                   repos = NULL, type = "source")
   
   install.packages(paste0(path, "/fastcascade_0.9.3.1.tar.gz"), 
                    repos = NULL, type = "source")
   
+  install.packages(paste0(path, "/GLcascade_0.9.3.1.tar.gz"), 
+                   repos = NULL, type = "source")
+  
 }
+
 
 
 
