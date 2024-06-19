@@ -15,15 +15,42 @@
 ########################### install packages   ##############################
 #==============================================================================#
 
-# set paths to zip tar.gz files, i.e. where GLcascade_0.1.0.0.zip and fastcascade_0.9.1.000.zip are saved
-path <- "C:/Users/CD/Nextcloud/GL_cascade_share" # example 
+# to install packages from source make sure C++/Fortan compilers are there; 
+#check https://cran.r-project.org/bin/windows/Rtools/rtools43/rtools.html
+
+# linear algebra in C++
+install.packages("Rcpp")
+install.packages("RcppArmadillo")
+
+
+# set paths to zip tar.gz files, i.e. where GLcascade_0.9.3.1.zip and fastcascade_0.9.3.1.zip are saved
+
+# put your path here
+path <- "C:/Users/CD/Nextcloud/GL_cascade_share"  
+
+# put your operating system type here (unix for mac and linux)
+os_type <- c("win", "unix")[2]
 
 # install packages from source
-install.packages(paste0(path, "/GLcascade_0.1.0.0.zip"), 
-                 repos = NULL, type = "win.binary")
+if(os_type == "win"){
+  install.packages(paste0(path, "/GLcascade_0.9.3.1.zip"), 
+                   repos = NULL, type = "win.binary")
+  
+  install.packages(paste0(path, "/fastcascade_0.9.3.1.zip"), 
+                   repos = NULL, type = "win.binary")
+}
 
-install.packages(paste0(path, "/fastcascade_0.9.1.000.zip"), 
-                 repos = NULL, type = "win.binary")
+if(os_type == "unix"){
+  install.packages(paste0(path, "/GLcascade_0.9.3.1.tar.gz"), 
+                   repos = NULL, type = "source")
+  
+  install.packages(paste0(path, "/fastcascade_0.9.3.1.tar.gz"), 
+                   repos = NULL, type = "source")
+  
+}
+
+
+
 
 # load the packages
 library(GLcascade)
