@@ -1,0 +1,562 @@
+---
+title: "Financial Exposure Network Optimization via Mixed Integer Linear Programming"
+author: C. Diem
+
+output:
+  html_document:
+    fig_caption: true
+    toc: true
+    toc_float:
+      collapsed: false
+#      smooth_scroll: false
+    number_sections: true
+    theme: journal
+    highlight: tango
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+
+This online documentation describes the necessary steps to perform the network optimization introduced in the paper *What is the Minimal Systemic Risk in Financial Exposure Networks?* by Diem, Pichler \& Thurner (2019). A preprint of the paper is available on [arXiv:1905.05931](https://arxiv.org/abs/1905.05931). 
+The goal of this paper is to show the huge systemic risk reduction potential stemming from the network structure of financial exposure networks. We showed that for ten snap shots of the Austrian interbank market the proposed optimization substantially reduces systemic risk --  measured with DebtRank (Battiston et al.,2012). First, we brefiefly outline the structure of the optimization problem and its formulation as mixed integer linear program (MILP). For the details of the reformulation and interpretation of the quantities we refer to the paper.
+
+First, we construct a randomly generated sample network as reference network. Second, we provide the *R* code to create the objective function and the constraints to solve optimization problem with the *R* package *ROI* (Theußl et al., 2019). Finally we visualize the results for the randomly construced sample network.  
+
+
+# The Network optimization Problem
+Given an interbank network, $L$, we want to minimize its DebtRank. Because the calculation of DebtRank is an interative procedure it is difficult to optimize. Thus, we approximate DebtRank by the so called direct impacts of a bank on its neighbours (adjacent banks in the network). 
+If bank $i$ defaults the direct loss of bank $j$ is $\min \Big( \frac{L_{ij}}{e_j},1 \Big)$. In the objective function bank $j$ has an economic weight corresponding to its share of all interbank market loans, $\frac{a_j}{\bar{L}}$. During the optimization the total amount of loans a bank has borrowed from (row sums of $L$) or lent to (column sums $L$) other banks shall stay the same. Additionally, the optimization shall leave the sum of loans weighted by their credit riskiness $\kappa$ unchanged. We showed that this problem can be formulated as
+\begin{align} 
+  \min_{L \in \{ M : \; M \in \mathbb{R}_+^{n \times n}, \; M_{ii}=0 \}  } &  \sum_{i=1}^{n}\sum_{j=1}^{n} \min \Big( \frac{L_{ij}}{e_j},1 \Big) \frac{a_j}{\bar{L}} \\
+  \text{s.t.} \qquad & l_i = \sum_{j=1}^{n} L_{ij} \quad \forall i  \tag{1}\\
+                   &  a_i = \sum_{j=1}^{n} L_{ji} \quad \forall i \nonumber, \\
+                   & r_i = \sum_{j=1}^{n} L_{ji}\kappa_j.
+\end{align}
+Details on the interpretation and definition of the quantities involved can be found in the paper. 
+
+## Equivalent Mixed Integer Linear Program 
+
+We showed how the above optimization problem (Eq.1) can be rewritten into a mixed integer linear program (MILP), as
+
+\begin{eqnarray} \label{eq:optim_milp}
+ \min_{ \{z \; \in \; \mathbb{R}_+^{4N^2} \} } & &  c^\top z & \\
+ \text{s.t.} \quad &	  A_1z & \leq & 0  \tag{2} \\
+                   &    A_2z & =    & a   \\
+                   &    A_3z & =    & l   \\
+                   &    A_4z & =    & r. 
+\end{eqnarray}
+
+The first $2N^2$ entrities of $z$ correspond to the entrities of the interbank liability matrix $L$ by $L_{11}=z_1+z_2$, $L_{21}=z_3+z_4$, $\dots$,the second set of $2N^2$ variables are binary variables, where $z_{2N^2+k}=1$, if $z_{k}>0$ and zero otherwise. $A_1$ contains the constraints on the variables $z$ to ensure the equivalence of (2) and (1). $A_2$ and $A_3$ represent the constraints that the row and column sums need stay constant during the optimization and $A_4$ implents the credit risk constraint. For implementing other constraints with economic interpretations see Section 3.1.
+
+## Generate a Reference Network to Optimize
+
+Before we can apply our optimization procedure we need an "empirically" observed financial network we can optimize. The optimization without the credit risk constraint can also be performed with the row and column sums of $L$ and the equity vector $e$.
+To illustrate the optimization, we use a randomly generated network with 25
+banks.  First, we sample the interbank asset vector $a$ and use a perturbed version as the interbank liability vector $l$. We set the equity vector $e$ proportional to the mean of $a$ and $l$. The sample is constructed such that we have 2 large banks, 3 medium sized banks and 20 smaller banks.  Then we use the *R* package *systemicrisk* from Gandy et al. (2016) to generate a sample network. The exact construction of the sample network, $L$, is shwon in the code chunk below.
+
+```{r , message=FALSE, warning=FALSE, echo = FALSE}
+library(systemicrisk)
+#setwd("C:/Users/C/OneDrive - IIASA/Work/Antonproject/R_computations_inclRevisions/ROI_online_doc")
+#load("BS.RData")
+```
+
+```{r  create sample network, message=FALSE, warning=FALSE, cache = FALSE}
+
+set.seed(50)
+
+n_b <- 2; n_m <- 3; n_s <- 20
+a <- c(runif(n_b,6000,10000), runif(n_m,2000,6000), runif(n_s,500,2000))
+l <- a + c(rnorm(n_b,0,2000),rnorm(n_m,0,700),rnorm(n_s,0,150))
+
+n <- length(a)
+a[n+1] <- if(sum(l)-sum(a) >0){sum(l)-sum(a)}else{0}
+l[n+1] <- if(sum(a)-sum(l) >0){sum(a)-sum(l)}else{0}
+n <- length(a)
+E <- (a+l)/5
+
+# use the systemicrisk package
+mod <- Model.additivelink.exponential.fitness(n,alpha=-2.5,beta=0.4,gamma=0.8,
+                 lambdaprior=Model.fitness.genlambdaparprior(ratescale=20))
+
+thin <-100 
+
+res <- sample_HierarchicalModel(l=l, a=a, model=mod, nsamples=100, thin=thin, silent=TRUE)
+
+# rounding the variables to two digits (monetary units)
+L <- round(res$L[[5]],2)
+a <- colSums(L)
+l <- rowSums(L)
+E <- round(E,2)
+kappa <- round(l/E,2)
+```
+
+
+
+For the illustration we choose the credit risk proxy $\kappa$ to be interbank leverage ratio of the bank; i.e. `kappa <- l/E`. In practice different credit risk proxies would be desirable.  
+
+# Creating \& Solving the MILP 
+
+## Create Objective Functions and Constraints for MILP
+The quantities $c, A_1, A_2, A_3, A_4$ from (Eq.2) are generated with the code chunk below. The details of the construction for the objective function can be found in Diem et al. (2019), (Eq.19), and the details for the constraint matrices are explained in Appendix A.
+
+``` {r milp,  message=FALSE, warning=FALSE}
+library(slam)
+N <- 4*n^2
+
+# Construct the objective function vector c
+
+slopes <- rep(a/E, each=n)
+c <- c(as.vector(rbind(slopes,rep(0,n*n))), rep(0, 2*n*n))
+  
+  
+  
+# Construct the four constraint matrices A1, A2, A3 & A4 
+ 
+# A1 
+
+  triplet_1 <- matrix(numeric(3*8*n^2), ncol=3)
+  a_l <- rep(a, each = n)
+  e_l <- rep(E, each = n)
+  l_l <- rep(l, n)
+  u_b  <- pmax( rep(0,n^2), pmin(a_l, l_l) - e_l)
+  
+  for(i in 1:(n^2)){                   #row     col         value
+    triplet_1[(i*8-7):(i*8), ] <- rbind(c(4*i-3, 2*i-1,        1),
+                                       c(4*i-3, 2*i-1+2*n^2, -e_l[i]),
+                                       
+                                       c(4*i-2, 2*i-1,       -1),
+                                       c(4*i-2, 2*i+2*n^2,    e_l[i]),
+                                       
+                                       c(4*i-1, 2*i,          1),
+                                       c(4*i-1, 2*i+2*n^2,   -u_b[i]),
+                                       
+                                       c(4*i,   2*i-1+2*n^2, -1),
+                                       c(4*i,   2*i+2*n^2,    1))
+  }
+  
+  A1 <- simple_triplet_matrix(triplet_1[,1], triplet_1[,2], triplet_1[,3])
+  
+  
+  
+  # A2
+
+  triplet_2 <- matrix(numeric(3*(2*n^2)), ncol=3)
+  
+  for(i in 1:n){
+    for(j in 1:n){
+      v <- if(i != j){1}else{0}
+      triplet_2[((2*i-2)*n+2*j-1):((2*i-2)*n+2*j), ] <- rbind( c(i, (2*j-2)*n  +2*i-1, v),
+                                                               c(i, (2*j-2)*n  +2*i,   v)) 
+    }
+  }
+  
+  
+  A2 <- cbind( simple_triplet_matrix(triplet_2[,1], triplet_2[,2], triplet_2[,3]),
+               simple_triplet_zero_matrix(n, 2*n^2))
+
+             
+  # A3
+  
+  triplet_3 <- matrix(numeric(3*(2*n^2)), ncol=3)
+  
+  for(i in 1:n){
+    for(j in 1:n){
+      v <- if(i != j){1}else{0}
+      triplet_3[((2*i-2)*n+2*j-1):((2*i-2)*n+2*j), ] <- rbind( c(i, (2*i-2)*n  +2*j-1, v),
+                                                               c(i, (2*i-2)*n  +2*j,   v)) 
+    }
+  }
+  
+  A3 <- cbind( simple_triplet_matrix(triplet_3[,1], triplet_3[,2], triplet_3[,3]),
+               simple_triplet_zero_matrix(n, 2*n^2))
+         
+  
+  
+  # A4
+  
+  triplet_4 <- matrix(numeric(3*(2*n^2)), ncol=3)
+  
+  for(i in 1:n){
+    for(j in 1:n){
+      v <- if(i != j){1*kappa[j]}else{0}
+      triplet_4[((2*i-2)*n+2*j-1):((2*i-2)*n+2*j), ] <- rbind( c(i, (2*i-2)*n  +2*j-1, v),
+                                                               c(i, (2*i-2)*n  +2*j,   v)) 
+    }
+  }
+  
+  A4 <- cbind( simple_triplet_matrix(triplet_4[,1], triplet_4[,2], triplet_4[,3]),
+               simple_triplet_zero_matrix(n, 2*n^2))
+       
+  
+  
+  # Merge the constraints together
+  A <- rbind(A1, A2, A3, A4)
+  # Check the dimensions
+  A
+  
+  
+  # Create upper bounds for the variables
+  ub <- numeric(n^2)
+  
+  for(i in 1:n){   # col index
+    for(j in 1:n){ # row index
+      ub[((i-1)*n)+j] <- max(0, min( a[i],l[j])-E[i])
+    }
+  }
+  
+  
+
+  # Create a vector of zeros and ones to ensure that the diagonal elements L_ii=0 
+  dia_constr <- matrix(rep(1,N/2), ncol = 2*n)
+  
+  for(j in 1:n){ # col 
+    
+    dia_constr[j, (2*(j-1)+1):(2*(j-1)+2)] <- c(0,0)
+    
+  }
+  dia_constr <- as.vector(t(dia_constr))
+ 
+  
+  # Create a long vector of equity entries
+  E_long <- rep(E, each = n)
+  
+  # Create a vector so that y_i1 is constraint by E_long and y_i2 by ub
+  u_long <- as.vector(rbind(E_long, ub))
+  
+  # combine the upper bounds with the zero upper bounds
+  u <- u_long*dia_constr
+  
+  # Create b, t, d for ROI OP()
+  b <- c(rep(0,N), l, a, crossprod(L,kappa)) 
+  t <- c(rep("C",2*n^2), rep("B", 2*n^2))
+  d <- c(rep("<=", N),rep("==", 3*n))
+
+```
+
+## Solving the optimization with ROI
+
+Now we can create the ROI object with the function `OP()` and solve it with `ROI_solve()`. Then, we transform the solution vector again into a liability matrix. For the optimization we use the *cplex* solver, which was working best in our experience. Smaller problems could also be solved with the open source solver [SYMPHONY](https://projects.coin-or.org/SYMPHONY). 
+``` {r roi, cache = FALSE, , message=FALSE, warning=FALSE}
+library(ROI)
+  
+  LMP_min <- OP(objective = L_objective(c),
+     constraints = L_constraint(L = A,
+                                dir = d, 
+                                rhs = b),
+     types = t,
+     bounds = V_bound(ui = 1:(N/2), ub = u, nobj=N),            
+     maximum = FALSE)
+  
+as.character(Sys.time())  
+
+  LMP_min_sol <- ROI_solve(LMP_min, "cplex")
+  
+as.character(Sys.time())
+  
+  LMP_min_sol
+  LMP_min_sol$objval
+  LMP_min_sol$objval/sum(a) # direct impacts
+  
+  
+
+
+  sol_vec <- LMP_min_sol$solution[1:(N/2)] # extract the non binary solution variables 
+  L_vec   <- sol_vec[rep(c(TRUE,FALSE),N/4)] + sol_vec[rep(c(FALSE,TRUE),N/4)]
+  
+  L_minDI <- matrix(L_vec, nrow=n)
+  
+  # check if the constraints are fulfilled
+  c(sum(round(rowSums(L_minDI), 8) == round(rowSums(L), 8))==n,
+    sum(round(colSums(L_minDI), 8) == round(colSums(L), 8))==n)
+
+  
+```
+Note that we can find a network with maximal direct impacts, simply by setting ``maximum = TRUE`` in the `OP()` function. This yields a network with a substantially higher DebtRank than the original one. 
+
+``` {r roimax, cache = FALSE, echo=TRUE}
+# maximisation problem  
+  LMP_max <- OP(objective = L_objective(c),
+     constraints = L_constraint(L = A,
+                                dir = d, 
+                                rhs = b),
+     types = t,
+     bounds = V_bound(ui = 1:(N/2), ub = u, nobj=N),            
+     maximum = TRUE)
+as.character(Sys.time())
+
+  LMP_max_sol <- ROI_solve(LMP_max, "cplex")
+  
+as.character(Sys.time())
+
+  LMP_max_sol
+  LMP_max_sol$objval
+  LMP_max_sol$objval/sum(a)
+
+  sol_vec <- LMP_max_sol$solution[1:(N/2)] # extract solutions of non binary objectives 
+  L_vec   <- sol_vec[rep(c(TRUE,FALSE),N/4)] + sol_vec[rep(c(FALSE,TRUE),N/4)]
+  
+  L_maxDI <- matrix(L_vec, nrow=n)  
+  
+  # check if the constraints are fulfilled
+  c(sum(round(rowSums(L_maxDI), 8) == round(rowSums(L), 8))==n,
+    sum(round(colSums(L_maxDI), 8) == round(colSums(L), 8))==n)
+
+```
+
+
+# Comparing Original and Optimized Networks
+
+We compare the direct impacts and DebtRanks of the three network types in Table 1. The optimized network show substantially smaller and higher DebtRank as the reference network. 
+
+```{r esults, echo=FALSE}
+
+# Debt Rank  be careful with transposing 
+
+DR <- function(L, E){ # L ... NxN matrix, E ... N-vector
+  
+  N <- length(E)
+  v <- rowSums(L)/sum(L)
+  h <- diag(N)
+  W <- pmin(sweep(t(L), MARGIN = 2, E, FUN = '/'), 1) # same as pmin(t(L/E),1)
+  
+  res <- numeric(N)
+  for(i in 1:N){
+    res[i] <- DR_dynamics(h=h[i,], W=W, v=v)
+  }
+  return(res)
+}
+
+
+
+DR_dynamics <- function(h, W, v){
+  s <- as.integer(h>0) ##### STATE VARIABLES:      0 = U; 1 = D; 2 = I
+  h1 <- h              # deduct in the end
+  
+  county <- 1   #### start with t=1
+  
+  while(any(s==1)){            #### run as long as someone is under distress
+    county <- county + 1       #### counting the time-steps
+    
+    a <- t(W*h) %*% as.integer(s==1)   #### summing the impacts from all distressed nodes
+    h <-  pmin(1,a + h)                #### can never destroy more than total assets
+    
+    s <- ifelse(s==1,2,                #### node gets inactive after being distressed
+                ifelse(h>0 & s==0, 1, s))   #### node gets distressed if positive shock occurs and node was undistressed
+    
+    #cat("\n", sum(cbind(h*v)),"\n", h*v, "\n", s, "\n")
+  }
+  return(sum(h*v - h1*v))    #### output
+}
+
+
+DI  <-  function(L, E){
+  
+  a     <- colSums(L)
+  x     <- as.vector(t(L))
+  E_l   <- rep(E , length(E))
+  a_l   <- rep(a , length(E))
+  c     <- a_l/E_l
+  
+  dis <- (pmin(x*c,a))%*%rep(1,length(E)^2)/sum(a)
+  
+  dis
+}
+
+
+DR_min <- DR(t(L_minDI), E)
+DR_emp <- DR(t(L), E)
+DR_max <- DR(t(L_maxDI), E)
+
+outputmat <- rbind(c(sum(DR_min), sum(DR_emp), sum(DR_max)), 
+                   c( DI(L_minDI, E), DI(L, E), DI(L_maxDI, E) ))
+colnames(outputmat) <- c("Minimized", "Empirical", "Maximized")
+rownames(outputmat) <- c("DebtRank", "Direct impacts")
+
+```
+
+```{r  echo=FALSE, warning=FALSE, }
+library(knitr)
+library(kableExtra)
+knitr::kable(outputmat, caption = "Table 1, Comparison of Network DebtRanks", digits=2) %>%
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+
+```
+
+
+```{r vis2,  eval=FALSE, echo=FALSE}
+
+par(mar = c(2,4.8,2,2)+0.1)
+par(mfrow=c(1,2))
+
+range_y <- range(DR_min, DR_emp)*c(0.9,1.15)
+plot(Time , DR_emp, ylim = range_y, type="l", col = "red", lty = 5, lwd = 0.7,
+     ylab = expression(paste("DebtRank of the network, ", italic(R))), xlab = "", cex = 2, axes=FALSE,
+     cex.axis = 1.5, cex.lab = 2)
+box()
+axis(1, Time, labels= Time_lab,  cex.axis = 1.8, cex.lab = 2)
+#axis(1, Time, labels=paste0(rep(seq(2006,2008,1), each=4), " ", c("Q1","Q2","Q3", "Q4")),  cex.axis = 1.5, cex.lab = 1.5)
+axis(2, seq(round(range_y[1])+1,round(range_y[2])-1,3),  cex.axis = 1.8, cex.lab = 1.5)
+points(Time , DR_emp, pch = 0, col = "red" ,cex=2)
+points(Time , DR_min, type = "l", col = "blue", lty = 5, lwd = 0.5, cex=2)
+points(Time, DR_min, pch = 2, col = "blue" ,cex=2)
+
+text(Time[1]+0.1, max(DR_emp)*1.15/1.05, "(a)", cex = 2)
+
+legend(x = "top", legend = c("Empirical","Optimized")  , col = c("red","blue"),
+       border = "black", pch=c(0,2), lty = 5, lwd = 0.5, cex=2, bty="n")
+
+
+plot(c() ,   ylim=c(0,1.05), xlim= c(min(Time),max(Time)+0.125 ), 
+     ylab = expression(paste("DebtRank of individual banks, ", italic(R[i]))), xlab = "", cex = 1, axes=FALSE,
+     cex.axis = 1.5, cex.lab = 2)
+box()
+
+text(Time[1]+.1, 1.0, "(b)", cex = 2)
+
+axis(1, Time+0.0625, labels= Time_lab,   cex.axis = 1.8, cex.lab = 1.5)
+#axis(1, Time+0.0625, labels=paste0(rep(seq(2006,2008,1), each=4), " ", c("Q1","Q2","Q3", "Q4")),  cex.axis = 1.3, cex.lab = 1.3)
+#axis(1, c(2006,2006.5,2007,2007.5,2008,2008.5)+0.0625, labels=as.character(c(2006,2006.5,2007,2007.5,2008,2008.5)),  cex.axis = 1.3, cex.lab = 1.3)
+axis(2, seq(0,1,.2),  cex.axis = 1.8, cex.lab = 1.5)
+for(i in 1:length(Time)){
+  points(rep(Time[i],     length(DR_emp[[i]])),DR_emp[[i]], pch = 0, col = "red", cex=2*sqrt(rowSums(L_list[[i]]))/sqrt(max(rowSums(L_list[[i]]))))
+  points(rep(Time[i]+1/8, length(DR_min[[i]])),  DR_min[[i]],   pch = 2, col = "blue", cex=2*sqrt(rowSums(L_list[[i]]))/sqrt(max(rowSums(L_list[[i]]))))
+}
+legend(x = "top", legend = c("Empirical","Optimized")  , col = c("red","blue"),
+       border = "black", pch=c(0,2), cex=2, bty="n")
+
+```
+
+
+
+
+Figure 1 shows the systemic risk profile of the reference network and the minimized network. The optimization reduces the systemic risk for most banks. 
+
+```{r barplot, echo=FALSE, fig.align="center", fig.cap='Figure 1, Systemic Risk Profile',fig.width=11.2,fig.height=5.8}
+plot_order <- order(DR_emp, decreasing=TRUE) # sort according to highest emp DR
+plot_mat <- rbind(DR_emp, DR_min)[,plot_order]
+
+par(mar = c(5,4.5,2,0)+0.1) # c(bottom, left, top, right)
+barplot(plot_mat , beside = TRUE, cex.lab = 1.8, cex.axis = 1.5, ylim=c(0,1),
+        col = c("red", "blue"), ylab = expression(paste("individual DebtRank, ", italic(R[i])))
+        ,xlab = "bank index (rank ordered)", border = c("red", "blue"), width = 0.5,
+        xlim = c(0,n), space = c(0,0))# ,   main = paste("Observation Q", k))
+
+legend(x = "topright", legend= c("empirical", "optimized"), col = c("red", "blue"),
+       border = "black", pch=c(15, 15),  cex=1.8, bty="n")
+box()
+axis(1, seq(0,n), cex.axis=1.5)
+
+
+```
+
+
+
+## Visualizing the Networks
+The three networks are visualized in Figure 2^[The networks are plotted with the *R* *igraph* package (Csardi et al., 2006) and colors are from the *R* *colorspace* package (Zeileis et al., 2009).]. The node colors indicate the level of DebtRank, the node sizes correspond to bank equity and the link widths to the size of the loan.  
+   
+   
+```{r vis, include=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center', fig.cap="Figure 2, Network Visualisation", fig.show='hold',fig.width=11.2,fig.height=8, out.width='50%'}
+
+library(colorspace)
+library(igraph)
+scl <- -.15
+Net_min <- graph_from_adjacency_matrix(L_minDI, weighted = TRUE)
+Net_emp <- graph_from_adjacency_matrix(L, weighted = TRUE)
+Net_max <- graph_from_adjacency_matrix(L_maxDI, weighted = TRUE)
+
+par(mar = c(0,0,3.2,.5)+0.1) # c(bottom, left, top, right)
+par(mfrow=c(1,1))
+  
+  # emp nw
+  E(Net_emp)$width <-  15*E(Net_emp)$weight/max(E(Net_emp)$weight) 
+  V(Net_emp)$size <-   15*E/(max((E)))
+  
+  
+  colorkey <- numeric(length(E))
+  ncols <- 20
+  colseq <- seq(min(DR_emp, DR_min, DR_max), max(DR_emp, DR_min, DR_max), length.out =ncols)
+  for(i in 1:(ncols-1)){
+  colorkey[ ( (colseq[i] <= DR_emp) & (DR_emp <= colseq[i+1]) ) ] <- i
+  }
+  
+V(Net_emp)$color <- (diverge_hcl(ncols, c = 300, l = c(50, 90), power = 0.7))[colorkey] 
+  
+  plot(Net_emp, layout = layout_on_sphere(Net_emp), edge.curved=0.1, edge.arrow.size=0.05, ylab = "", 
+       margin=scl, vertex.label = NA )
+  
+  text(0, 1.12, "empirical", cex = 3)
+  text(-.9, 1.12, "(a)", cex = 3)
+  E(Net_min)$width <-  15*E(Net_min)$weight/max(E(Net_min)$weight) 
+  V(Net_min)$size <-   15*E/(max((E)))
+  
+  for(i in 1:(ncols-1)){
+  colorkey[ ( (colseq[i] <= DR_min) & (DR_min<= colseq[i+1]) ) ] <- i
+  }
+  V(Net_min)$color <- (diverge_hcl(ncols, c = 300, l = c(50, 90), power = 0.7))[colorkey] 
+
+  plot(Net_min, layout = layout_on_sphere(Net_min), edge.curved=0.1, edge.arrow.size=0.05, ylab = "", 
+       margin=scl, vertex.label = NA )
+
+  text(0, 1.12, "minimized", cex = 3)
+  text(-.9, 1.12, "(b)", cex = 3)
+ #max nw
+  
+  E(Net_max)$width <-  15*E(Net_max)$weight/max(E(Net_max)$weight) 
+  V(Net_max)$size <-   15*E/(max((E)))
+  
+  for(i in 1:(ncols-1)){
+  colorkey[ ( (colseq[i] <= DR_max) & (DR_max<= colseq[i+1]) ) ] <- i
+  }
+  V(Net_max)$color <- (diverge_hcl(ncols, c = 300, l = c(50, 90), power = 0.7))[colorkey] 
+
+  plot(Net_max, layout = layout_on_sphere(Net_max), edge.curved=0.1, edge.arrow.size=0.05, ylab = "", 
+       margin=scl, vertex.label = NA ) 
+  
+  text(0, 1.12, "maximized", cex = 3)
+  text(-.9, 1.12, "(c)", cex = 3)
+  
+  
+  #adding a colorbar ... using rect
+cols <- diverge_hcl(ncols, c = 300, l = c(50, 90), power = 0.7)
+colrange <- range(colseq)
+y_coltop <- colseq[-1]#*2 - (colrange[2]-colrange[1])
+y_colbot <- colseq[-ncols]#*2- (colrange[2]-colrange[1])
+
+par(new = T)
+par(mar = c(0.5,0,2.5,2.5)+0.1) # c(bottom, left, top, right)
+
+plot(1,1,  xlim= c(0,1), ylim = range(colseq), cex.lab = 1.8, type = "n" ,  axes=FALSE, xlab = "", ylab="")
+rect(xleft =1.01, xright = 1.04, ybottom = y_colbot, ytop =  y_coltop , col = cols, border=NA )
+axis(side = 4, cex.axis = 1.8)
+
+
+
+
+```
+
+
+
+
+
+# References 
+
+
+Battiston, S., Puliga, M., Kaushik, R., Tasca, P., & Caldarelli, G. (2012). DebtRank: Too Central to Fail? Financial Networks, the FED and Systemic Risk. Scientific Reports, 2, 541. doi:10.1038/srep00541.
+
+Csardi, G., & Nepusz, T. (2006). The igraph software package for complex network research. InterJournal, Complex Systems, 1695(5), 1-9.
+
+Diem, C., Pichler, A., & Thurner, S. (2019). What is the Minimal Systemic Risk in Financial Exposure Networks?. arXiv preprint [arXiv:1905.05931](https://arxiv.org/abs/1905.05931).
+
+Gandy, A., & Veraart, L. A. (2016). A Bayesian Methodology for Systemic Risk Assessment in Financial Networks. Management Science, 63(12), 4428-4446. doi:10.1287/mnsc.2016.2546.
+
+Theußl, S., Schwendinger, F., & Hornik, K. (2019) ROI: An extensible R Optimization Infrastructure. Research Report Series / Department of Statistics and Mathematics, 133. WU Vienna University of Economics and Business, Vienna. 
+
+Zeileis, A., Hornik, K., & Murrell, P. (2009). Escaping RGBland: Selecting colors for statistical graphics. Computational Statistics & Data Analysis, 53(9), 3259-3270.
