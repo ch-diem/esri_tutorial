@@ -114,6 +114,24 @@ ess_mat_sec
 
 
 
+### save all code inputs generated
+data_wd <- "C:/Users/CD/Documents/GitHub/amoc_shock/test_data"
+## 
+write.csv(as.matrix(W),
+          paste0(data_wd, "/W_dummy.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+write.csv(p,
+          paste0(data_wd, "/p_dummy.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+write.csv(as.matrix(ess_mat_sec),
+          paste0(data_wd, "/ess_mat_sec_dummy.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+
+
+
 # take a look at the example:
 library(igraph)
 library(colorspace)
@@ -132,7 +150,8 @@ E(net)$width <- 1.5
 E(net)$arrow.size <- 0.3
 E(net)$arrow.width <- 3
 set.seed(2)
-plot(net, layout=layout_with_lgl(net), vertex.frame.color ="white", edge.color = "black")
+plot(net, #layout=layout_with_lgl(net), 
+     vertex.frame.color ="white", edge.color = "black")
 legend(x=-3, y=2.2, legend = unique(sort(p)), pch = 16, col = colrs, ncol = 5, cex=1.1, 
        bty="n")
 
@@ -229,7 +248,6 @@ p_sf <- industries$industry_id
 
 
 
-png("delte")
 
 ESRI <- GL_cascade(W = W_sf,
                    p = p_sf,
@@ -239,8 +257,8 @@ ESRI <- GL_cascade(W = W_sf,
                    h_weights = FALSE,       
                    sec_aggr_weights = FALSE, 
                    psi_mat = FALSE,
-                   revenue = revenue_sf,
-                   costs = costs_sf,
+                   revenue = FALSE,
+                   costs = FALSE,
                    track_h = TRUE,
                    track_sector_impacts = FALSE, 
                    track_conv = TRUE,
@@ -274,6 +292,7 @@ plot(ESRI$ESRI[ranks,"ESRI_weight_1"],
 
 # use revenue / cost renormalization
 
+set.seed(1)
 revenue_sf <- rowSums(W_sf) * (1+ runif(dim(W_sf)[1], 0.2, 0.4))
 
 costs_sf <- rowSums(W_sf) * (1+ runif(dim(W_sf)[1], 0.2, 0.4))
@@ -398,10 +417,17 @@ length(unique(sectors_short))
 # correspondence table to NACE 4 digit entry in the ess_mat_n4_ihs file
 icio_secs_to_NACE4 <- sapply(substr(sectors, 1,3), function(x) min(grep(x, (nace_conv_mat[, "nace1_2"]))))
 
-ess_mat_sec_icio <- ess_mat_n4_ihs[icio_secs_to_NACE4 , icio_secs_to_NACE4]
+ess_mat_sec_icio <- Matrix(ess_mat_n4_ihs[icio_secs_to_NACE4 , icio_secs_to_NACE4])
 rownames(ess_mat_sec_icio) <- colnames(ess_mat_sec_icio) <- substr(colnames(ess_mat_sec_icio), 1, 2)
 
-image(ess_mat_sec_icio)
+Matrix::image(ess_mat_sec_icio)
+
+
+
+# linear essential non-essential matrix
+
+ess_mat_sec_icio_lin <- ess_mat_sec_icio
+ess_mat_sec_icio_lin[ess_mat_sec_icio_lin > 0] <- 1
 
 # 
 p_icio <- substr(p_icio, 1,3)
@@ -412,19 +438,39 @@ p_icio <- icio_secs_to_NACE4[p_icio]
 # gives the nace4 digit codes and trims it to nace2 digit
 p_icio <- substr(nace_conv_mat[p_icio, "nace4_num"], start = 1, stop = 2)
 
-sort(unique(p_icio)) == rownames(ess_mat_sec)
+sort(unique(p_icio)) == rownames(ess_mat_sec_icio)
 
-plot(as.numeric(colnames(ess_mat_sec)) - as.numeric(sort(unique(p_icio))))
+plot(as.numeric(colnames(ess_mat_sec_icio)) - as.numeric(sort(unique(p_icio))))
 
 dim(ess_mat_sec_lin)
 length(sort(unique(p_icio)))
 
 
-### revenue correction 
+### revenue correction to account for final demand; could integrate final demand as own node
 
 total_output <- icio[1:grep("ROW_T", rownames(icio)), "OUT"]
 
+### material cost correction not needed as all sectors are included already
 
+
+### save all code inputs generated
+
+## 
+write.csv(as.matrix(W_icio),
+          paste0(data_wd, "/W_icio.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+write.csv(p_icio,
+          paste0(data_wd, "/p_icio.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+write.csv(as.matrix(ess_mat_sec_icio),
+          paste0(data_wd, "/ess_mat_sec_icio.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+write.csv(total_output,
+          paste0(data_wd, "/total_output_icio.csv"), 
+          row.names = FALSE, fileEncoding = "UTF-8")
 
 # specify for how many firms the systemic risk index should be computed (to allow for a runtime guess)
 dim(W_icio)
@@ -457,7 +503,7 @@ ESRI_icio <- GL_cascade(W = W_icio,
                    load_balance = TRUE
 )
 
-ESRI$run_info
+ESRI_icio$run_info
 
 hist(ESRI_icio$ESRI_conv[,3], 
      xlab = "number of iterations")
@@ -470,8 +516,10 @@ plot(ESRI_icio$ESRI[ranks,"ESRI_weight_1"],
      cex = 0.5)
 
 
-cbind(as.matrix(round(ESRI_icio$ESRI[,1], 3)), country_sec_pair[1:n_test])[ranks[1:100],]
-
+esri_country_sector_mat <- cbind(as.matrix(round(ESRI_icio$ESRI[,1], 3)), 
+                                 country_sec_pair[1:n_test])[ranks[1:n_test],]
+colnames(esri_country_sector_mat) <-  c("ESRI_value", "Country_Sector")
+esri_country_sector_mat <- data.frame(esri_country_sector_mat)
 
 unique(nace_conv_mat[, c(5, 9) ])
 
@@ -479,6 +527,14 @@ unique(nace_conv_mat[, c(5, 9) ])
 # save results 
 saveRDS(ESRI_icio, paste0(data_wd, "/ESRI_result.rds"))
 
+write.csv(esri_country_sector_mat,
+        paste0(data_wd, "/ESRI_result_icio.csv"), 
+        row.names = FALSE, fileEncoding = "UTF-8")
+
+
+
+
+### cascade without replaceability (sigma)
 
 ESRI_icio_norep <- GL_cascade(W = W_icio,
                         p = p_icio,
