@@ -1,8 +1,13 @@
 #==============================================================================#
-########################### using the GL cascade  ##############################
+#################### using the GL cascade package ##############################
 #==============================================================================#
 
-#
+# for details on shock propagation see: 
+# Diem, C., Borsos, A., Reisch, T., Kertész, J., & Thurner, S. (2022). Quantifying firm-level economic systemic risk from nation-wide supply networks. Scientific reports, 12(1), 7719.
+# Diem, C., Borsos, A., Reisch, T., Kertész, J., & Thurner, S. (2024). Estimating the loss of economic predictability from aggregating firm-level production networks. PNAS nexus, 3(3), pgae064.
+#==============================================================================#
+
+
 
 # 1. install the R packages
 # 2. test if code works on dummy example
@@ -11,54 +16,76 @@
 
 
 
-#==============================================================================#
-########################### install packages   ##############################
-#==============================================================================#
+
+#-------------------------------------------------------------------------------#
+# Download and Install Required Packages
+#-------------------------------------------------------------------------------#
 
 # to install packages from source make sure C++/Fortan compilers are there; 
 #check https://cran.r-project.org/bin/windows/Rtools/rtools43/rtools.html
 
 # linear algebra in C++
+Sys.time()
+
 install.packages("Rcpp")
+Sys.time()
+
 install.packages("RcppArmadillo")
+Sys.time()
+
+# sparse matrices
+install.packages("Matrix")
+Sys.time()
+
+# visualisation
+install.packages("igraph")
+Sys.time()
+
+install.packages("colorspace")
+Sys.time()
 
 
-# set paths to zip tar.gz files, i.e. where GLcascade_0.9.3.1.zip and fastcascade_0.9.3.1.zip are saved
+# check if it worked
+library(Rcpp)
+library(RcppArmadillo)
+library(Matrix)
+library(igraph)
+library(colorspace)
 
-# put your path here
-path <- "C:/Users/CD/Nextcloud/GL_cascade_share"  
 
-# put your operating system type here (unix for mac and linux)
-os_type <- c("win", "unix")[2]
 
-# install packages from source
-if(os_type == "win"){
-  install.packages(paste0(path, "/fastcascade_0.9.3.1.zip"), 
+
+# Set paths to the .zip or .tar.gz files (hosted on GitHub)
+path_sc <- "https://github.com/ch-diem/misestimation_from_aggregation/raw/refs/heads/main"
+
+# Dynamically detect the operating system
+os_type <- ifelse(.Platform$OS.type == "windows", "win", "unix")
+
+# Install the required packages based on the operating system
+if (os_type == "win") {
+  install.packages(paste0(path_sc, "/fastcascade_0.9.3.1.zip"), 
                    repos = NULL, type = "win.binary")
-  
-  install.packages(paste0(path, "/GLcascade_0.9.3.1.zip"), 
+  install.packages(paste0(path_sc, "/GLcascade_0.9.3.1.zip"), 
                    repos = NULL, type = "win.binary")
-  
-  
 }
 
-if(os_type == "unix"){
-  
-  install.packages(paste0(path, "/fastcascade_0.9.3.1.tar.gz"), 
+if (os_type == "unix") {
+  install.packages(paste0(path_sc, "/fastcascade_0.9.3.1.tar.gz"), 
                    repos = NULL, type = "source")
-  
-  install.packages(paste0(path, "/GLcascade_0.9.3.1.tar.gz"), 
+  install.packages(paste0(path_sc, "/GLcascade_0.9.3.1.tar.gz"), 
                    repos = NULL, type = "source")
-  
 }
 
-
-
-
-
-# load the packages
+#-------------------------------------------------------------------------------#
+# Load Installed Packages
+#-------------------------------------------------------------------------------#
 library(GLcascade)
 library(fastcascade)
+
+# Documentation lookup for the GLcascade package
+??GLcascade
+
+
 library(Matrix)
 
 
@@ -108,26 +135,26 @@ p %in% rownames(ess_mat_sec)
 # ess_mat_sec[i,j] = 0 ... i is a non-relevant supplier of j (no impact)
 
 # all entries are 1 --> every firm has a linear production function
+# all entries are 2 --> every firm has a Leontief production function
 ess_mat_sec
 
-# all entries are 2 --> every firm has a Leontief production function
 
 
 
 ### save all code inputs generated
-data_wd <- "C:/Users/CD/Documents/GitHub/amoc_shock/test_data"
-## 
-write.csv(as.matrix(W),
-          paste0(data_wd, "/W_dummy.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
-
-write.csv(p,
-          paste0(data_wd, "/p_dummy.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
-
-write.csv(as.matrix(ess_mat_sec),
-          paste0(data_wd, "/ess_mat_sec_dummy.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
+# data_wd <- "C:/Users/CD/Documents/GitHub/amoc_shock/test_data"
+# ## 
+# write.csv(as.matrix(W),
+#           paste0(data_wd, "/W_dummy.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
+# 
+# write.csv(p,
+#           paste0(data_wd, "/p_dummy.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
+# 
+# write.csv(as.matrix(ess_mat_sec),
+#           paste0(data_wd, "/ess_mat_sec_dummy.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
 
 
 
