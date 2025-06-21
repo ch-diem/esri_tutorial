@@ -433,18 +433,6 @@ p_icio <- substr(country_sec_pair, start = 5, stop = nchar(country_sec_pair))
 sectors <- sort(unique(p_icio))
 sectors
 
-# 
-p_icio <- substr(p_icio, 1,3)
-
-# gives the row in the nace_conv_mat[, "nace4_num"]
-p_icio <- icio_secs_to_NACE4[p_icio]
-
-# gives the nace4 digit codes and trims it to nace2 digit
-p_icio <- substr(nace_conv_mat[p_icio, "nace4_num"], start = 1, stop = 2)
-
-sort(unique(p_icio)) == rownames(ess_mat_sec_icio)
-
-
 
 # take only the first mentioned NACE if the sector refers to more than one
 sectors_short <- substr(sectors, 1,3)
@@ -454,6 +442,20 @@ sort(sectors_short)
 
 # correspondence table to NACE 4 digit entry in the ess_mat_n4_ihs file
 icio_secs_to_NACE4 <- sapply(substr(sectors, 1,3), function(x) min(grep(x, (nace_conv_mat[, "nace1_2"]))))
+
+
+# 
+p_icio <- substr(p_icio, 1,3)
+
+# gives the row in the nace_conv_mat[, "nace4_num"]
+p_icio <- icio_secs_to_NACE4[p_icio]
+
+# gives the nace4 digit codes and trims it to nace2 digit
+p_icio <- substr(nace_conv_mat[p_icio, "nace4_num"], start = 1, stop = 2)
+
+
+
+
 
 ess_mat_sec_icio <- Matrix(ess_mat_n4_ihs[icio_secs_to_NACE4 , icio_secs_to_NACE4])
 rownames(ess_mat_sec_icio) <- colnames(ess_mat_sec_icio) <- substr(colnames(ess_mat_sec_icio), 1, 2)
@@ -467,6 +469,7 @@ Matrix::image(ess_mat_sec_icio)
 ess_mat_sec_icio_lin <- ess_mat_sec_icio
 ess_mat_sec_icio_lin[ess_mat_sec_icio_lin > 0] <- 1
 
+sort(unique(p_icio)) == rownames(ess_mat_sec_icio)
 
 
 plot(as.numeric(colnames(ess_mat_sec_icio)) - as.numeric(sort(unique(p_icio))))
@@ -503,7 +506,7 @@ total_output <- icio[1:grep("ROW_T", rownames(icio)), "OUT"]
 
 # specify for how many firms the systemic risk index should be computed (to allow for a runtime guess)
 dim(W_icio)
-n_test <- 3465
+n_test <- 500
 psi_mat <- Matrix::Diagonal(dim(W_icio)[1])[,1:n_test] # sub-setting the columns can be used to test the cascade for a subsample of firms (now its 10)
 
 # to calculate the systemic risk for all firms use:
@@ -527,7 +530,7 @@ ESRI_icio <- GL_cascade(W = W_icio,
                    conv_type = 1,
                    eps = 10^-2,
                    use_rcpp = TRUE,
-                   ncores = 10,#parallel::detectCores()-3,
+                   ncores = parallel::detectCores()-1,
                    run_id = "ESRI_icio",
                    load_balance = TRUE
 )
@@ -553,12 +556,12 @@ esri_country_sector_mat <- data.frame(esri_country_sector_mat)
 unique(nace_conv_mat[, c(5, 9) ])
 
 
-# save results 
-saveRDS(ESRI_icio, paste0(data_wd, "/ESRI_result.rds"))
-
-write.csv(esri_country_sector_mat,
-        paste0(data_wd, "/ESRI_result_icio.csv"), 
-        row.names = FALSE, fileEncoding = "UTF-8")
+# # save results 
+# saveRDS(ESRI_icio, paste0(data_wd, "/ESRI_result.rds"))
+# 
+# write.csv(esri_country_sector_mat,
+#         paste0(data_wd, "/ESRI_result_icio.csv"), 
+#         row.names = FALSE, fileEncoding = "UTF-8")
 
 
 
