@@ -258,12 +258,11 @@ plot(ESRI$ESRI_conv[ranks,3],
 ############# using the dummy network from Session 1 ########################### 
 #==============================================================================#
 
+data_wd <- "https://raw.githubusercontent.com/ch-diem/esri_tutorial/refs/heads/main/data/"
 
-plt_wd <- "~/WorkII/Teaching/phd_seminar_bamberg/code/plots/"
-
-W_sf <- as.matrix(read.csv(file = paste0(plt_wd, "example_net_scale_free_101_4000.csv")))
-W_er <- as.matrix(read.csv(file = paste0(plt_wd, "example_net_erdos_reny_101_213.csv") ))
-industries <- read.csv(file = paste0(plt_wd, "industry_vector.csv"))
+W_sf <- as.matrix(read.csv(file = paste0(data_wd, "example_net_scale_free_101_4000.csv")))
+W_er <- as.matrix(read.csv(file = paste0(data_wd, "example_net_erdos_reny_101_213.csv") ))
+industries <- read.csv(file = paste0(data_wd, "industry_vector.csv"))
 
 sectors <- sort(unique(industries$industry_id))
 
@@ -296,9 +295,9 @@ ESRI <- GL_cascade(W = W_sf,
                    run_id = "test_cascade",
                    load_balance = FALSE
 )
+
+
 dev.off()
-
-
 hist(ESRI$ESRI_conv[,3], 
      xlab = "number of iterations")
 
@@ -315,7 +314,7 @@ plot(ESRI$ESRI[ranks,"ESRI_weight_1"],
 
 ### A few sensitivity checks
 
-# use replaceability 
+# use replaceability by setting p_market = p_sf
 
 # use revenue / cost renormalization
 
@@ -327,21 +326,17 @@ costs_sf <- rowSums(W_sf) * (1+ runif(dim(W_sf)[1], 0.2, 0.4))
 
 # vary ess_mat_sec elements
 
-
-# increase essentialness of 
-ess_mat_sec_lin[1, c(1,2,3, 4)] <- 2
-
-
+# all sectors are non-essential for each other
 ess_mat_sec_lin[] <- 1
 
 
-# increase essentialness of 
+# increase essentialness of sector 2 for sector 4
 ess_mat_sec_lin[2, c(4)] <- 2
 
 
 ESRI_2 <- GL_cascade(W = W_sf,
                    p = p_sf,
-                   p_market = FALSE,
+                   p_market = p_sf,
                    p_sec_impacts = FALSE,   
                    ess_mat_sec =  ess_mat_sec_lin,
                    h_weights = FALSE,       
@@ -402,10 +397,9 @@ boxplot(sizes,
 ### load the network data and store it as a sparse matrix
 
 
-datapath <- "C:/Users/CD/Documents/WorkII/Teaching/phd_seminar_bamberg/ICIO/2020.SML/2020.SML.csv"
-data_wd <- "C:/Users/CD/Documents/WorkII/Teaching/phd_seminar_bamberg/ICIO/2020.SML/"
 
-icio <- read.csv(datapath)
+icio <- read.csv(file = paste0(data_wd, "2020.SML.csv"))
+icio[1:5, 1:5]
 rownames(icio) <- icio[,1]
 # drop first column 
 icio <- icio[,-1]
@@ -418,28 +412,45 @@ grep("ROW_T", colnames(icio))
 
 # convert to matrix
 W_icio <- as.matrix(icio[1:grep("ROW_T", rownames(icio)), 1:grep("ROW_T", rownames(icio))])
-sum(W_icio <= 0)
+sum(W_icio == 0)
 sum(W_icio <= 1)
 
-W_icio[W_icio <= 1] <- 0
 
 # make sparse
-W_icio <- Matrix(W_icio)
-image(W_icio[1:300, 1:300])
+W_icio <- Matrix::Matrix(W_icio)
+Matrix::image(W_icio[1:300, 1:300])
+
+# threshold links that are smaller than 1 million 
+W_icio[W_icio <= 1] <- 0
+Matrix::image(W_icio[1:300, 1:300])
+
 
 country_sec_pair <- rownames(W_icio)
 
+# extract the NACE sectors
 p_icio <- substr(country_sec_pair, start = 5, stop = nchar(country_sec_pair))
 
 sectors <- sort(unique(p_icio))
+sectors
 
-# ess_mat_sec_lin <- matrix(1, nrow = length(sectors), ncol = length(sectors))
-# rownames(ess_mat_sec_lin) <- colnames(ess_mat_sec_lin) <- sectors
+# 
+p_icio <- substr(p_icio, 1,3)
+
+# gives the row in the nace_conv_mat[, "nace4_num"]
+p_icio <- icio_secs_to_NACE4[p_icio]
+
+# gives the nace4 digit codes and trims it to nace2 digit
+p_icio <- substr(nace_conv_mat[p_icio, "nace4_num"], start = 1, stop = 2)
+
+sort(unique(p_icio)) == rownames(ess_mat_sec_icio)
+
+
 
 # take only the first mentioned NACE if the sector refers to more than one
 sectors_short <- substr(sectors, 1,3)
 # we did not lose any
 length(unique(sectors_short))
+sort(sectors_short)
 
 # correspondence table to NACE 4 digit entry in the ess_mat_n4_ihs file
 icio_secs_to_NACE4 <- sapply(substr(sectors, 1,3), function(x) min(grep(x, (nace_conv_mat[, "nace1_2"]))))
@@ -456,16 +467,7 @@ Matrix::image(ess_mat_sec_icio)
 ess_mat_sec_icio_lin <- ess_mat_sec_icio
 ess_mat_sec_icio_lin[ess_mat_sec_icio_lin > 0] <- 1
 
-# 
-p_icio <- substr(p_icio, 1,3)
 
-# gives the row in the nace_conv_mat[, "nace4_num"]
-p_icio <- icio_secs_to_NACE4[p_icio]
-
-# gives the nace4 digit codes and trims it to nace2 digit
-p_icio <- substr(nace_conv_mat[p_icio, "nace4_num"], start = 1, stop = 2)
-
-sort(unique(p_icio)) == rownames(ess_mat_sec_icio)
 
 plot(as.numeric(colnames(ess_mat_sec_icio)) - as.numeric(sort(unique(p_icio))))
 
@@ -483,21 +485,21 @@ total_output <- icio[1:grep("ROW_T", rownames(icio)), "OUT"]
 ### save all code inputs generated
 
 ## 
-write.csv(as.matrix(W_icio),
-          paste0(data_wd, "/W_icio.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
-
-write.csv(p_icio,
-          paste0(data_wd, "/p_icio.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
-
-write.csv(as.matrix(ess_mat_sec_icio),
-          paste0(data_wd, "/ess_mat_sec_icio.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
-
-write.csv(total_output,
-          paste0(data_wd, "/total_output_icio.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-8")
+# write.csv(as.matrix(W_icio),
+#           paste0(data_wd, "/W_icio.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
+# 
+# write.csv(p_icio,
+#           paste0(data_wd, "/p_icio.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
+# 
+# write.csv(as.matrix(ess_mat_sec_icio),
+#           paste0(data_wd, "/ess_mat_sec_icio.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
+# 
+# write.csv(total_output,
+#           paste0(data_wd, "/total_output_icio.csv"), 
+#           row.names = FALSE, fileEncoding = "UTF-8")
 
 # specify for how many firms the systemic risk index should be computed (to allow for a runtime guess)
 dim(W_icio)
