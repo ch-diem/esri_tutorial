@@ -506,7 +506,7 @@ total_output <- icio[1:grep("ROW_T", rownames(icio)), "OUT"]
 
 # specify for how many firms the systemic risk index should be computed (to allow for a runtime guess)
 dim(W_icio)
-n_test <- 500
+n_test <- 3465 
 psi_mat <- Matrix::Diagonal(dim(W_icio)[1])[,1:n_test] # sub-setting the columns can be used to test the cascade for a subsample of firms (now its 10)
 
 # to calculate the systemic risk for all firms use:
@@ -557,7 +557,7 @@ unique(nace_conv_mat[, c(5, 9) ])
 
 
 # # save results 
-# saveRDS(ESRI_icio, paste0(data_wd, "/ESRI_result.rds"))
+# saveRDS(ESRI_icio, paste0("", "/ESRI_result.rds"))
 # 
 # write.csv(esri_country_sector_mat,
 #         paste0(data_wd, "/ESRI_result_icio.csv"), 
