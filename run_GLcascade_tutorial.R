@@ -86,8 +86,6 @@ library(fastcascade)
 ??GLcascade
 
 
-library(Matrix)
-
 
 
 #==============================================================================#
@@ -386,7 +384,7 @@ boxplot(sizes,
 
 
 #==============================================================================#
-############# Calculating Systemic Risk on real data ########################### 
+############# ICIO Calculating Systemic Risk on real data ########################### 
 #==============================================================================#
 
 # to dos: 
@@ -548,9 +546,9 @@ plot(ESRI_icio$ESRI[ranks,"ESRI_weight_1"],
      cex = 0.5)
 
 
-esri_country_sector_mat <- cbind(as.matrix(round(ESRI_icio$ESRI[,1], 3)), 
+esri_country_sector_mat <- cbind(as.matrix(round(ESRI_icio$ESRI[,1:3], 3)), 
                                  country_sec_pair[1:n_test])[ranks[1:n_test],]
-colnames(esri_country_sector_mat) <-  c("ESRI_value", "Country_Sector")
+colnames(esri_country_sector_mat) <-  c("ESRI_value","ESRI_value_down","ESRI_value_up", "Country_Sector")
 esri_country_sector_mat <- data.frame(esri_country_sector_mat)
 
 unique(nace_conv_mat[, c(5, 9) ])
@@ -559,9 +557,9 @@ unique(nace_conv_mat[, c(5, 9) ])
 # # save results 
 # saveRDS(ESRI_icio, paste0("", "/ESRI_result.rds"))
 # 
-# write.csv(esri_country_sector_mat,
-#         paste0(data_wd, "/ESRI_result_icio.csv"), 
-#         row.names = FALSE, fileEncoding = "UTF-8")
+write.csv(esri_country_sector_mat,
+        paste0( "results/ESRI_result_icio.csv"),
+        row.names = FALSE, fileEncoding = "UTF-8")
 
 
 
@@ -704,3 +702,190 @@ unique(nace_conv_mat[, c(5, 9) ])
 
 # save ESRI_icio_leo 
 saveRDS(ESRI_icio_leo, paste0(data_wd, "/ESRI_icio_leo.rds"))
+
+
+
+
+
+#==============================================================================#
+############# EXIOBASE Calculating Systemic Risk on real data ########################### 
+#==============================================================================#
+
+
+exiobase <-data.table::fread(file = paste0("data/exio_base/", "network.csv"))
+
+dim(exiobase)
+
+exiobase[1:2, 1:2]
+
+rownames(exiobase)
+colnames(exiobase)
+
+
+W_exio <- as.matrix(exiobase[,-1])
+
+W_exio <- Matrix::Matrix(W_exio)
+
+quantile(W_exio[W_exio>0], 1:1000/1000)
+sum(W_exio>0)
+sum(W_exio>1)
+sum(W_exio>10)
+
+
+Matrix::image(W_exio[1:500, 1:500], lwd = 0)
+
+W_exio[W_exio < 1] <- 0
+W_exio[1:10, 1:10]
+gc()
+
+Matrix::image(W_exio[1:500, 1:500], lwd = 0)
+
+
+# W_exio[W_exio < 10] <- 0
+# W_exio[1:10, 1:10]
+# gc()
+# 
+# Matrix::image(W_exio[1:500, 1:500], lwd = 0)
+
+
+# node names
+country_sector_vec <- (exiobase$V1)
+length(unique(country_sector_vec))
+
+# industry affiliation vector of nodes
+p_exio <- read.csv(file = paste0("data/exio_base/", "industry_vector.csv"))
+head(p_exio)
+length(unique(p_exio[,2]))
+table(p_exio[,2])
+
+p_exio <- p_exio[,2]
+
+# essentialness of sectors
+ess_mat_sec_exio <- read.csv(file = paste0("data/exio_base/", "ess_mat_sec_industry_id_rounded.csv"))
+dim(ess_mat_sec_exio)
+ess_mat_sec_exio <- as.matrix(ess_mat_sec_exio[,-1])
+dim(ess_mat_sec_exio)
+Matrix::image(Matrix::Matrix(ess_mat_sec_exio), lwd=0)
+
+table(ess_mat_sec_exio)
+
+rownames(ess_mat_sec_exio) <- colnames(ess_mat_sec_exio) <- sort(unique(p_exio))
+
+# essentialness of sectors
+ess_mat_sec_exio2 <- read.csv(file = paste0("data/exio_base/", "ess_mat_sec_rounded.csv"))
+dim(ess_mat_sec_exio2)
+ess_mat_sec_exio2 <- as.matrix(ess_mat_sec_exio2[,-1])
+dim(ess_mat_sec_exio2)
+Matrix::image(Matrix::Matrix(ess_mat_sec_exio2), lwd=0)
+
+table(ess_mat_sec_exio2)
+
+rownames(ess_mat_sec_exio2) <- colnames(ess_mat_sec_exio2) <- sort(unique(p_exio))
+
+
+Matrix::image(Matrix::Matrix(ess_mat_sec_exio2- ess_mat_sec_exio), lwd=0)
+
+
+# total sales of nodes (network sales + final demand)
+total_sales_exio <- read.csv(file = paste0("data/exio_base/", "total_sales_EXIOBASE3.csv"))
+total_sales_exio <- total_sales_exio[,2]
+
+hist(log10(total_sales_exio+1))
+
+plot(Matrix::rowSums(W_exio)+1, total_sales_exio+1, log = "xy")
+abline(0,1)
+plot(  total_sales_exio - Matrix::rowSums(W_exio))
+sum(( total_sales_exio - Matrix::rowSums(W_exio) )< 0)
+
+
+psi_mat <- Matrix::Diagonal(nrow(W_exio))
+
+ESRI_exio <- GL_cascade(W = W_exio,
+                        p = p_exio,
+                        p_market = as.numeric(p_exio),
+                        p_sec_impacts = FALSE,   
+                        ess_mat_sec =  ess_mat_sec_exio,
+                        h_weights = cbind(rowSums(W_exio), colSums(W_exio), rowSums(W_exio) + colSums(W_exio)),  #     
+                        sec_aggr_weights = FALSE, 
+                        psi_mat = psi_mat,
+                        revenue = total_sales_exio,
+                        costs = FALSE,
+                        track_h = TRUE,
+                        track_sector_impacts = FALSE, 
+                        track_conv = TRUE,
+                        conv_type = 1,
+                        eps = 10^-2,
+                        use_rcpp = TRUE,
+                        ncores = parallel::detectCores()-2,
+                        run_id = "ESRI_exio",
+                        load_balance = TRUE
+)
+
+ESRI_exio$run_info
+
+
+hist(ESRI_exio$ESRI_conv[,3], 
+     xlab = "number of iterations")
+
+
+ranks <- order(ESRI_exio$ESRI[,1], decreasing = TRUE)
+plot(ESRI_exio$ESRI[ranks,"ESRI_weight_1"],
+     ylab= "ESRI", xlab = "firm ID (rank sorted)",
+     main = "Systemic Risk Profile", log= "x", 
+     cex = 0.5)
+
+
+
+ESRI_named <- cbind(country_sector_vec, as.matrix(ESRI_exio$ESRI[,1:3]))
+ESRI_named[ranks,]
+
+write.csv(ESRI_named[ranks,],
+          paste0( "results/ESRI_result_exio_thresh1.csv"),
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+
+
+
+ESRI_exio2 <- GL_cascade(W = W_exio,
+                        p = p_exio,
+                        p_market = as.numeric(p_exio),
+                        p_sec_impacts = FALSE,   
+                        ess_mat_sec =  ess_mat_sec_exio2,
+                        h_weights = cbind(rowSums(W_exio), colSums(W_exio), rowSums(W_exio) + colSums(W_exio)),  #     
+                        sec_aggr_weights = FALSE, 
+                        psi_mat = psi_mat,
+                        revenue = total_sales_exio,
+                        costs = FALSE,
+                        track_h = TRUE,
+                        track_sector_impacts = FALSE, 
+                        track_conv = TRUE,
+                        conv_type = 1,
+                        eps = 10^-2,
+                        use_rcpp = TRUE,
+                        ncores = parallel::detectCores()-2,
+                        run_id = "ESRI_exio",
+                        load_balance = TRUE
+)
+
+ESRI_exio2$run_info
+
+
+hist(ESRI_exio2$ESRI_conv[,3], 
+     xlab = "number of iterations")
+
+
+ranks <- order(ESRI_exio2$ESRI[,1], decreasing = TRUE)
+plot(ESRI_exio2$ESRI[ranks,"ESRI_weight_1"],
+     ylab= "ESRI", xlab = "firm ID (rank sorted)",
+     main = "Systemic Risk Profile", log= "x", 
+     cex = 0.5)
+
+
+
+ESRI_named2 <- cbind(country_sector_vec, as.matrix(ESRI_exio2$ESRI[,1:3]))
+ESRI_named2[ranks,]
+
+
+write.csv(ESRI_named2[ranks,],
+          paste0( "results/ESRI_result_exio2_thresh1.csv"),
+          row.names = FALSE, fileEncoding = "UTF-8")
