@@ -883,6 +883,19 @@ plot(ESRI_exio2$ESRI[ranks,"ESRI_weight_1"],
 
 
 
+plot(ESRI_exio$ESRI[,1], ESRI_exio2$ESRI[,1])
+plot(ESRI_exio$ESRI[,1], ESRI_exio2$ESRI[,1], log = "xy")
+
+plot(ESRI_exio$ESRI[,3] - ESRI_exio2$ESRI[,3])
+
+plot( total_sales_exio + 1, ESRI_exio$ESRI[, 1], log = "xy")
+plot( rowSums(W_exio) + colSums(W_exio), ESRI_exio$ESRI[, 1], log = "xy")
+
+
+plot( total_sales_exio + 1, ESRI_exio2$ESRI[, 1], log = "xy")
+
+
+
 ESRI_named2 <- cbind(country_sector_vec, as.matrix(ESRI_exio2$ESRI[,1:3]))
 ESRI_named2[ranks,]
 
