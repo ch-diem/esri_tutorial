@@ -740,6 +740,7 @@ gc()
 
 Matrix::image(W_exio[1:500, 1:500], lwd = 0)
 
+sum(W_exio > 0)
 
 # W_exio[W_exio < 10] <- 0
 # W_exio[1:10, 1:10]
